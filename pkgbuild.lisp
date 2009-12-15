@@ -108,7 +108,7 @@
 ;; We can check if repo comes back nil but the mapcar in main will still tell
 ;; the user that the package as fetched and in a directory that doesn't exist.
 (defun get-pkgbuild (pkg-name)
-  (maybe-refresh-cache)
+  (ensure-initial-cache)
   (let ((repo (car (find-package-by-name pkg-name))))
     (if (string= "aur" repo)
 	(get-pkgbuild-from-aur pkg-name)
@@ -122,23 +122,24 @@
   (unpack-file (aur-tarball-name pkg-name))
   (delete-file (aur-tarball-name pkg-name)))
 
-;; TODO: Handle the case where "packages" or "community" directory exists. User probably won't want it deleted.
 (defun get-pkgbuild-from-svn (pkg-name repo)
   (let ((arch (get-carch))
 	(server "svn://svn.archlinux.org/")
-	(operation "checkout")
-	(depth "--depth=empty"))
-    (labels ((checkout-and-mv-pkgbuild (directory)
-	       (run-program "svn" (list operation depth (concatenate 'string server directory)))
-	       (setf (current-directory) directory)
-	       (run-program "svn" (list "update" pkg-name))
-	       (run-program "mv" (list (concatenate 'string pkg-name "/repos/" repo "-" arch)
-				       (concatenate 'string "../" pkg-name)))
-	       (setf (current-directory) "..")
-	       (delete-directory-and-files directory)))
+	(operation "checkout"))
+    (flet ((checkout-pkgbuild (directory)
+	     (let ((return-value
+		    (run-program "svn" (list operation
+					     (concatenate 'string server directory pkg-name
+							  "/repos/" repo "-" arch)
+					     pkg-name))))
+	       (if (zerop return-value)
+		   (format nil "The ~a pkgbuild is in ~a." pkg-name
+			   (concatenate 'string (namestring (current-directory)) pkg-name "/"))
+		   (format nil "Subversion exited with non-zero status ~d for package ~a."
+			   return-value pkg-name)))))
       (if (string= repo "community")
-	  (checkout-and-mv-pkgbuild "community")
-	  (checkout-and-mv-pkgbuild "packages")))))
+	  (checkout-pkgbuild "community/")
+	  (checkout-pkgbuild "packages/")))))
 
 (defun install-pkg-tarball (&key (tarball (get-pkgbuild-tarball-name)) (location (get-pkgdest)))
   (let ((pkg-location (concatenate 'string (ensure-trailing-slash location) tarball))
