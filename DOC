@@ -1,0 +1,14 @@
+To install the dependencies,
+(require 'asdf-install)
+(asdf-install:install :md5 :trivial-backtrace :cl-store :cl-json
+	       :drakma :cffi :alexandria :metatilities
+	       :getopt :split-sequence :cl-ppcre :py-configparser)
+
+Or, if you had some of the dependencies resolved from AUR, you need
+(asdf-install:install :trivial-backtrace :cl-store :cl-json
+	       :drakma :metatilities :getopt :py-configparser)
+
+
+To run,
+(require :asdf) ; This line can go to ~/.sbclrc
+(asdf:oos 'asdf:load-op 'paktahn)
