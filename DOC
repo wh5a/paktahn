@@ -12,3 +12,4 @@ Or, if you had some of the dependencies resolved from AUR, you need
 To run,
 (require :asdf) ; This line can go to ~/.sbclrc
 (asdf:oos 'asdf:load-op 'paktahn)
+(in-package :pak)

@@ -152,7 +152,7 @@ BODY may call RETRY at any time to restart its execution."
 						     (install-handler
 						      #'level1-handler))))
 		   (quit)))
-	  (install-handler #'level1-handler))
+	  (install-handler #'level2-handler))
   #+ecl(warn "Sigint handling not implemented yet.")
   #-(or sbcl ecl)(error "no sigint handling"))
 
