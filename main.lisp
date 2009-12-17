@@ -321,6 +321,9 @@ Usage:
   pak -R PACKAGE # remove PACKAGE
   pak -G PACKAGE # download pkgbuild into a new directory named PACKAGE~%"))
 
+(setf *pkgbuild-helper* "pkgbuild-helper.sh")
+(setf *makepkg-helper* "makepkg-helper.sh")
+
 (defun main (argv &aux (argc (length argv)))
   "Secondary entry point: process config and command line."
   (load-config)
