@@ -111,13 +111,13 @@
         (setf (current-directory) pkg-name)
 
 	;; update the checksum database in case another process has added new checksums
-	(load-checksums)
+;	(load-checksums)
 
 	;; check to see if the PKGBUILD has been seen before
-	(compare-checksums pkg-name)
+;;;	(compare-checksums pkg-name)
 	
         ;; store the modified checksums DB
-	(save-checksums)
+;	(save-checksums)
 
 	;; if a customization exists for the pkg, apply it
 	(when (customize-p pkg-name)
