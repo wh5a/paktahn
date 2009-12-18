@@ -313,6 +313,7 @@ Returns T upon successful installation, NIL otherwise."
 Usage:
   pak QUERY      # search for QUERY
   pak -S PACKAGE # install PACKAGE
+  pak -L PATH    # install PKGBUILD from PATH locally
   pak -R PACKAGE # remove PACKAGE
   pak -G PACKAGE # download pkgbuild into a new directory named PACKAGE~%"))
 
@@ -329,6 +330,8 @@ Usage:
      (search-and-install-packages (first argv)))
     ((and (>= argc 2) (equal (first argv) "-S"))
      (mapcar #'install-package (cdr argv)))
+    ((and (>= argc 2) (equal (first argv) "-L"))
+     (mapcar #'install-local-package (cdr argv)))
     ((and (>= argc 2) (equal (first argv) "-R"))
      (mapcar #'remove-package (cdr argv)))
     ((and (>= argc 2) (equal (first argv) "-G"))

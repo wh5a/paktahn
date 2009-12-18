@@ -20,4 +20,5 @@
 	       (:file "pkgbuild")
 	       (:file "aur")
 	       (:file "cache")
+	       (:file "local")
 	       (:file "main")))
