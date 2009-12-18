@@ -168,12 +168,7 @@ Returns T upon successful installation, NIL otherwise."
                (cond
                  ((and (package-installed-p pkg-name) (not force))
                   (info "Package ~S is already installed." pkg-name)
-                  (if (and (equalp *root-package* pkg-name)
-                           (ask-y/n "Reinstall it" nil))
-                    (progn
-                      (setf force t)
-                      (do-install))
-                    t))
+                  t)
                  ((not db-name)
                   (unless (search-and-install-packages pkg-name :query-for-providers t)
                     (restart-case
