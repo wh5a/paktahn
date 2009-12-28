@@ -18,7 +18,7 @@ md5sums=()
 
 build() {
 
-  cd $srcdir/..
+  cd $startdir
   
   # compile
   SBCL=sbcl
