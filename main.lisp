@@ -57,6 +57,7 @@
       (when installed-version
         (format t " ")
         (cond
+          ; TODO: This comparison done lexicographically is flawed! "10" < "9"
           ((string< installed-version version)
            (with-term-colors/id :pkg-old
              (format t "[~A installed]" installed-version)))
