@@ -26,10 +26,24 @@
                  (and (equalp (car x) (car y))
                       (equalp (cdr x) (cdr y)))))
 
+(defun parse-proxy-spec (http-proxy)
+  (let ((regex "((http|https)://[^/?#]+):([0-9]{1,5})?(.*)"))
+    (let ((matches (nth-value 1 (cl-ppcre:scan-to-strings regex http-proxy))))
+      (cond ((null (third matches)) http-proxy)
+	    (t (list (concatenate 'string (first matches) (fourth matches))
+		     (read-from-string (third matches))))))))
+
+(defun check-for-aur-proxy ()
+  (let ((no-proxies (environment-variable "no_proxy"))
+	(http-proxy (environment-variable "http_proxy")))
+    (and http-proxy
+         (or (null no-proxies) (not (search "archlinux.org" no-proxies)))
+         (parse-proxy-spec http-proxy))))
 
 (defun map-aur-packages (fn query)
   "Search AUR for a string"
-  (let ((json:*json-symbols-package* #.*package*))
+  (let ((json:*json-symbols-package* #.*package*)
+	(proxy (check-for-aur-proxy)))
     (json:with-decoder-simple-clos-semantics
       (let* (socket-error-p
              (json
@@ -39,6 +53,7 @@
                  (retrying
                    (restart-case
                        (drakma:http-request "http://aur.archlinux.org/rpc.php"
+					    :proxy proxy
                                             :parameters `(("type" . "search")
                                                           ("arg" . ,query)))
                      (retry ()

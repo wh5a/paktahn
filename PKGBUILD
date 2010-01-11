@@ -1,16 +1,17 @@
+# Contributor: Brit Butler <redline6561@gmail.com>
 # Contributor: Leslie P. Polzer <polzer@gnu.org>
 # Maintainer: Leslie P. Polzer <polzer@gnu.org>
 
 pkgname=paktahn
 pkgver=0.8.2
 libver=0.8
-pkgrel=1
+pkgrel=2
 pkgdesc="The kick-ass package manager for Arch Linux!"
 arch=('i686' 'x86_64')
 depends=('pacman' 'readline' 'sudo')
 makedepends=('sbcl>=1.0.32' 'cl-md5' 'cl-cffi' 'cl-alexandria-darcs' 'cl-split-sequence' 'cl-ppcre')
 license=('GPL')
-url="http://blog.viridian-project.de/2009/09/19/announcement-paktahn-a-successor-to-yaourt/"
+url="http://github.com/skypher/paktahn"
 options=(!strip)
 install="paktahn.install"
 source=()
@@ -29,6 +30,7 @@ build() {
        --eval "(pushnew :paktahn-deploy *features*)" \
        --eval "(require :asdf)" \
        --eval "(push #p\"/usr/share/common-lisp/systems/\" asdf:*central-registry*)" \
+       --eval "(asdf:oos 'asdf:load-op 'split-sequence)" \
        --eval "(asdf:oos 'asdf:load-op 'paktahn)" \
        --eval "(pak::build-core :forkp nil)"
 

@@ -107,13 +107,17 @@
                                       (unless quiet
                                         (print-package i db-name name version desc :stream stream))))))))
          (aur-pkg-fn (lambda (match)
-                       (incf i)
                        (with-slots (id name version description out-of-date) match
-                         (push-end (list i "aur" name version) packages)
-                         (unless quiet
-                           (print-package i "aur" name version description
-                                          :stream stream
-                                          :out-of-date-p (equal out-of-date "1")))))))
+                         (when (or (and exact (equalp query name)) ; TODO we can return immediately on an exact result.
+                                   (and (not exact)
+                                        (or (search query name :test #'equalp)
+                                            (search query description :test #'equalp))))
+                           (incf i)
+                           (push-end (list i "aur" name version) packages)
+                           (unless quiet
+                             (print-package i "aur" name version description
+                                            :stream stream
+                                            :out-of-date-p (equal out-of-date "1"))))))))
     (map-cached-packages db-pkg-and-grp-fn)
     (map-aur-packages aur-pkg-fn query)
     packages))
@@ -177,14 +181,24 @@ Returns T upon successful installation, NIL otherwise."
                (cond
                  ((and (package-installed-p pkg-name) (not force))
                   (info "Package ~S is already installed." pkg-name)
-                  (let ((local-ver (package-installed-p pkg-name))
-                        (remote-ver (car (cdddar (get-package-results pkg-name :exact t)))))
-                    (if (and (or (version< local-ver remote-ver)
-                                 (equalp *root-package* pkg-name))
-                             (ask-y/n "Reinstall it" nil))
-                        (progn
-                          (setf force t)
-                          (do-install))
+                  (let ((local-version (package-installed-p pkg-name))
+                        (remote-version (fourth (car (get-package-results pkg-name :exact t)))))
+		    (if (or (and (version< local-version remote-version)
+				 (ask-y/n (format nil "Package ~A is out of date. Upgrade it to version ~A"
+                                                  pkg-name remote-version)
+                                          t))
+			    (and (version= local-version remote-version)
+                                 (equalp *root-package* pkg-name)
+				 (ask-y/n (format nil "Package ~A already installed. Reinstall it"
+                                                  pkg-name)
+                                          nil))
+			    (and (version> local-version remote-version)
+				 (ask-y/n (format nil "Package ~A is more recent than remote version. ~
+                                                       Downgrade it to version ~A" pkg-name remote-version)
+                                          nil)))
+			(progn
+			  (setf force t)
+			  (do-install))
                         t)))
                  ((not db-name)
                   (unless (search-and-install-packages pkg-name :query-for-providers t)
@@ -208,7 +222,9 @@ Returns T upon successful installation, NIL otherwise."
       ;; environment to reflect this, or we're installing a dep and
       ;; should check that the environment has been set up properly.
       (cond
-	;; if the package has a customizepkg definition, build it with customizations applied whether it's a dependency or not
+	;; if the package has a customizepkg definition, build it with
+        ;; customizations applied whether it's a dependency or not
+        #+(or) ; needs rework
 	((customize-p pkg-name)
 	 (unwind-protect
 	      (progn
