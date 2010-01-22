@@ -30,7 +30,6 @@ build() {
        --eval "(pushnew :paktahn-deploy *features*)" \
        --eval "(require :asdf)" \
        --eval "(push #p\"/usr/share/common-lisp/systems/\" asdf:*central-registry*)" \
-       --eval "(asdf:oos 'asdf:load-op 'split-sequence)" \
        --eval "(asdf:oos 'asdf:load-op 'paktahn)" \
        --eval "(pak::build-core :forkp nil)"
 

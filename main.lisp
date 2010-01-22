@@ -122,6 +122,12 @@
     (map-aur-packages aur-pkg-fn query)
     packages))
 
+(defun package-remote-version (pkg-name)
+  (let ((result (get-package-results pkg-name :exact t)))
+    (if result
+      (fourth (car result))
+      (loop for repo-pkg-pair in (find-providing-packages pkg-name)
+            thereis (package-installed-p (cdr repo-pkg-pair))))))
 
 ;;; user interface
 #+(or) ; not used right now
@@ -180,26 +186,31 @@ Returns T upon successful installation, NIL otherwise."
     (labels ((do-install ()
                (cond
                  ((and (package-installed-p pkg-name) (not force))
-                  (info "Package ~S is already installed." pkg-name)
                   (let ((local-version (package-installed-p pkg-name))
-                        (remote-version (fourth (car (get-package-results pkg-name :exact t)))))
-		    (if (or (and (version< local-version remote-version)
-				 (ask-y/n (format nil "Package ~A is out of date. Upgrade it to version ~A"
-                                                  pkg-name remote-version)
-                                          t))
-			    (and (version= local-version remote-version)
-                                 (equalp *root-package* pkg-name)
-				 (ask-y/n (format nil "Package ~A already installed. Reinstall it"
-                                                  pkg-name)
-                                          nil))
-			    (and (version> local-version remote-version)
-				 (ask-y/n (format nil "Package ~A is more recent than remote version. ~
-                                                       Downgrade it to version ~A" pkg-name remote-version)
-                                          nil)))
-			(progn
-			  (setf force t)
-			  (do-install))
-                        t)))
+                        (remote-version (package-remote-version pkg-name)))
+                    (flet ((force-install ()
+                             (setf force t)
+                             (do-install)))
+                      (cond
+                        ((version< local-version remote-version)
+                         (when (ask-y/n (format nil "Package ~A is out of date. Upgrade it to version ~A"
+                                                pkg-name remote-version)
+                                        t)
+                           (force-install)))
+                        ((and (version= local-version remote-version)
+                              (equalp *root-package* pkg-name))
+                         (when (ask-y/n (format nil "Package ~A already installed. Reinstall it"
+                                                pkg-name)
+                                        nil)
+                           (force-install)))
+                        ((and (version> local-version remote-version))
+                         (when (ask-y/n (format nil "Package ~A is more recent than remote version. ~
+                                                Downgrade it to version ~A" pkg-name remote-version)
+                                        nil)
+                           (force-install)))
+                        (t
+                         (info "Package ~S is already installed." pkg-name)
+                         t)))))
                  ((not db-name)
                   (unless (search-and-install-packages pkg-name :query-for-providers t)
                     (restart-case
@@ -210,11 +221,11 @@ Returns T upon successful installation, NIL otherwise."
                         (do-install)))))
                  ((equalp db-name "aur")
                   (install-aur-package pkg-name))
-		 ((not (equalp *root-package* pkg-name))
-		  (install-binary-package db-name pkg-name :dep-of *root-package*))
+                 ((not (equalp *root-package* pkg-name))
+                  (install-binary-package db-name pkg-name :dep-of *root-package*))
                  ((or (eq db-name 'group)
                       (member db-name (mapcar #'car *sync-dbs*) :test #'equalp))
-                  (install-binary-package db-name pkg-name))
+                  (install-binary-package db-name pkg-name :force force))
                  #+(or)
                  (t
                   (error "BUG: missing DO-INSTALL case")))))
@@ -222,19 +233,19 @@ Returns T upon successful installation, NIL otherwise."
       ;; environment to reflect this, or we're installing a dep and
       ;; should check that the environment has been set up properly.
       (cond
-	;; if the package has a customizepkg definition, build it with
+        ;; if the package has a customizepkg definition, build it with
         ;; customizations applied whether it's a dependency or not
         #+(or) ; needs rework
-	((customize-p pkg-name)
-	 (unwind-protect
-	      (progn
+        ((customize-p pkg-name)
+         (unwind-protect
+              (progn
                 (get-pkgbuild pkg-name)
                 (setf (current-directory) pkg-name)
                 (apply-customizations)
                 (run-makepkg)
                 (install-pkg-tarball))
-	   (cleanup-temp-files pkg-name)))
-	;; installing a dep
+           (cleanup-temp-files pkg-name)))
+        ;; installing a dep
         ((boundp '*root-package*)
          (assert *root-package*)
          (check-type *root-package* string)
@@ -329,17 +340,15 @@ Returns T upon successful installation, NIL otherwise."
                 #+(or)(info "Package ~S is not installed, skipping removal." pkg-name)
                 nil)
                (t
-                (run-pacman (list "-R" pkg-name))))))
+                (prog1
+                    (run-pacman (list "-R" pkg-name))
+                  (maybe-refresh-cache))))))
     (restart-case
         (do-remove)
       (skip-package ()
         :report (lambda (s)
                   (format s "Skip removal of package ~S and continue" pkg-name))
         (values nil 'skipped)))))
-
-(defun parse-options (argv)
-  ;; TODO
-  (getopt:getopt argv nil))
 
 (defun display-help ()
   (format t "~
@@ -366,9 +375,9 @@ Usage:
      (mapcar #'remove-package (cdr argv)))
     ((and (>= argc 2) (equal (first argv) "-G"))
      (let ((return-values nil))
-       (mapcar #'(lambda (pkg)
-		   (push (get-pkgbuild pkg) return-values)) (cdr argv))
-       (loop for result in (reverse return-values) do (info "~s" result))))
+       (mapcar (lambda (pkg)
+                 (push (get-pkgbuild pkg) return-values)) (cdr argv))
+       (loop for result in (reverse return-values) do (info result))))
     (t
      (display-help))))
 
@@ -397,18 +406,19 @@ Usage:
                                              :executable t
                                              :save-runtime-options t)))
             (if forkp
-		(let ((pid (sb-posix:fork)))
-		  (if (zerop pid)
-		      (dump)
-		      (progn
-			(format t "INFO: waiting for child to finish building the core...~%")
-			(sb-posix:waitpid pid 0)
-			(format t "INFO: ...done~%"))))
-		(dump))))
+              (let ((pid (sb-posix:fork)))
+                (if (zerop pid)
+                  (dump)
+                  (progn
+                    (format t "INFO: waiting for child to finish building the core...~%")
+                    (sb-posix:waitpid pid 0)
+                    (format t "INFO: ...done~%"))))
+              (dump))))
   #+ccl(ccl:save-application "paktahn"
-			     :toplevel-function #'core-main
-			     :prepend-kernel t)
+                             :toplevel-function #'core-main
+                             :prepend-kernel t)
   #+ecl(asdf:make-build :paktahn :type :program :monolithic t
-			:prologue-code '(require :asdf)
-			:epilogue-code '(paktahn::core-main))
+                        :prologue-code '(require :asdf)
+                        :epilogue-code '(paktahn::core-main))
   #-(or sbcl ecl ccl)(error "don't know how to build a core image"))
+
