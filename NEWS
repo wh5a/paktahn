@@ -1,3 +1,10 @@
+0.8.3
+=====
+  * update cache after package removal (proposed by Ralith)
+
+  * handle non-Unicode strings more gracefully (#9, reported by zajca)
+
+
 0.8.2
 =====
   * more restarts after failed AUR package installation ("pacman -U" step)
@@ -10,8 +17,9 @@
   * Paktahn now remembers which PKGBUILD files it already presented
     for review (Brit)
 
-  * Paktahn now has proper customizepkg support and will automatically
-    build packages with customizepkg definitions from source (Brit)
+  * Paktahn now has proper customizepkg support for AUR packages and
+    will automatically build packages with customizepkg definitions
+    from source (Brit)
 
   * Paktahn now has support for just getting a pkgbuild (i.e. yaourt -G)
     with pak -G pkgnames (Brit)
@@ -20,7 +28,13 @@
 
   * AUR package dependencies are no longer installed explicitly (reported by bram85)
 
+  * Basic proxy support (no authentication) (Brit)
+
+  * Basic versioning support (Wei Hu, Leslie)
+
+
 0.8.1
+=====
   * fixed x86_64 package building/installation
   * fixed case when $EDITOR also had args in it (e.g. "emacsclient -l")
   * package removal support
@@ -31,5 +45,7 @@
     not listed in the PKGBUILD.
   * fixed --help and -h arguments (reported by Ralith)
 
+
 0.8
+===
   * Initial release.

@@ -1,19 +1,17 @@
-for next release:
+features for next major release:
 
-  * support for proxy environment variables, see
-    http://www.editcorp.com/Personal/Lars_Appel/wget/wget_8.html
-    http://weitz.de/drakma/#proxy
+  * on first startup ask the user which color scheme and pacman wrapper they prefer
 
   * make SIGINT quit while in *any* error handler, not just one caused
     by SIGINT itself.
 
-  * very basic versioning support (show version number besides result
-    if upstream differs)
+  * -Sy
 
+  * -Su, -Su --aur
 
 later:
 
-  * short banner (and config option to disable it)
+  * check whether packages in extra/core are out of date
 
   * website, proper help/docs
 

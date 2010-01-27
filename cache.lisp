@@ -108,7 +108,7 @@ contains a list of sublists (PKGNAME VERSION DESC). Initially NIL.")
                            (push (list (alpm-pkg-get-name pkg)
                                        (alpm-pkg-get-version pkg)
                                        (alpm-pkg-get-desc pkg)
-                                       (mapcar #'foreign-string-to-lisp (alpm-list->lisp (alpm-pkg-get-provides pkg))))
+                                       (mapcar #'safe-foreign-string-to-lisp (alpm-list->lisp (alpm-pkg-get-provides pkg))))
                                  (gethash db-name *cache-contents*)))
                          :db-list (list db-spec))
 

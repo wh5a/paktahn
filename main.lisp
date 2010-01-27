@@ -1,6 +1,6 @@
 (in-package :pak)
 
-(declaim (optimize (debug 3) (safety 2) (speed 1) (space 1)))
+(declaim (optimize (debug 3) (safety 3) (speed 1) (space 1)))
 
 (defun package-installed-p (pkg-name &optional pkg-version) ; TODO groups
   (map-cached-packages (lambda (db-name pkg)
@@ -11,11 +11,11 @@
                                (when (and (equalp name pkg-name)
                                           (or (null pkg-version)
                                               (equalp pkg-version version)))
-                                 (return-from package-installed-p (values t :installed)))
+                                 (return-from package-installed-p (values version :installed)))
                                (when (member pkg-name provides
                                              :test #'equalp
                                              :key (compose #'first #'parse-dep))
-                                 (return-from package-installed-p (values t :provided))))))
+                                 (return-from package-installed-p (values version :provided))))))
                        :db-list (list *local-db*))
   nil)
 
@@ -53,10 +53,19 @@
     (with-term-colors/id :pkg-version
       (format t "~A" version))
     ;; installation status
-    (when (package-installed-p name) ; TODO: version
-      (format t " ")
-      (with-term-colors/id :pkg-installed
-        (format t "[installed]")))
+    (let ((installed-version (package-installed-p name)))
+      (when installed-version
+        (format t " ")
+        (cond
+          ((version< installed-version version)
+           (with-term-colors/id :pkg-old
+             (format t "[~A installed]" installed-version)))
+          ((version> installed-version version)
+           (with-term-colors/id :pkg-result-id
+             (format t "[~A installed]" installed-version)))
+          (t
+           (with-term-colors/id :pkg-installed
+             (format t "[installed]"))))))
     ;; out of date? (aur-only)
     (when out-of-date-p
       (format t " ")
@@ -94,21 +103,31 @@
                                                    (or (search query name :test #'equalp)
                                                        (search query desc :test #'equalp))))
                                       (incf i)
-                                      (push-end (list i db-name name) packages)
+                                      (push-end (list i db-name name version) packages)
                                       (unless quiet
                                         (print-package i db-name name version desc :stream stream))))))))
          (aur-pkg-fn (lambda (match)
-                       (incf i)
                        (with-slots (id name version description out-of-date) match
-                         (push-end (list i "aur" name) packages)
-                         (unless quiet
-                           (print-package i "aur" name version description
-                                          :stream stream
-                                          :out-of-date-p (equal out-of-date "1")))))))
+                         (when (or (and exact (equalp query name)) ; TODO we can return immediately on an exact result.
+                                   (and (not exact)
+                                        (or (search query name :test #'equalp)
+                                            (search query description :test #'equalp))))
+                           (incf i)
+                           (push-end (list i "aur" name version) packages)
+                           (unless quiet
+                             (print-package i "aur" name version description
+                                            :stream stream
+                                            :out-of-date-p (equal out-of-date "1"))))))))
     (map-cached-packages db-pkg-and-grp-fn)
     (map-aur-packages aur-pkg-fn query)
     packages))
 
+(defun package-remote-version (pkg-name)
+  (let ((result (get-package-results pkg-name :exact t)))
+    (if result
+      (fourth (car result))
+      (loop for repo-pkg-pair in (find-providing-packages pkg-name)
+            thereis (package-installed-p (cdr repo-pkg-pair))))))
 
 ;;; user interface
 #+(or) ; not used right now
@@ -167,8 +186,31 @@ Returns T upon successful installation, NIL otherwise."
     (labels ((do-install ()
                (cond
                  ((and (package-installed-p pkg-name) (not force))
-                  (info "Package ~S is already installed." pkg-name)
-                  t)
+                  (let ((local-version (package-installed-p pkg-name))
+                        (remote-version (package-remote-version pkg-name)))
+                    (flet ((force-install ()
+                             (setf force t)
+                             (do-install)))
+                      (cond
+                        ((version< local-version remote-version)
+                         (when (ask-y/n (format nil "Package ~A is out of date. Upgrade it to version ~A"
+                                                pkg-name remote-version)
+                                        t)
+                           (force-install)))
+                        ((and (version= local-version remote-version)
+                              (equalp *root-package* pkg-name))
+                         (when (ask-y/n (format nil "Package ~A already installed. Reinstall it"
+                                                pkg-name)
+                                        nil)
+                           (force-install)))
+                        ((and (version> local-version remote-version))
+                         (when (ask-y/n (format nil "Package ~A is more recent than remote version. ~
+                                                Downgrade it to version ~A" pkg-name remote-version)
+                                        nil)
+                           (force-install)))
+                        (t
+                         (info "Package ~S is already installed." pkg-name)
+                         t)))))
                  ((not db-name)
                   (unless (search-and-install-packages pkg-name :query-for-providers t)
                     (restart-case
@@ -179,11 +221,11 @@ Returns T upon successful installation, NIL otherwise."
                         (do-install)))))
                  ((equalp db-name "aur")
                   (install-aur-package pkg-name))
-		 ((not (equalp *root-package* pkg-name))
-		  (install-binary-package db-name pkg-name :dep-of *root-package*))
+                 ((not (equalp *root-package* pkg-name))
+                  (install-binary-package db-name pkg-name :dep-of *root-package*))
                  ((or (eq db-name 'group)
                       (member db-name (mapcar #'car *sync-dbs*) :test #'equalp))
-                  (install-binary-package db-name pkg-name))
+                  (install-binary-package db-name pkg-name :force force))
                  #+(or)
                  (t
                   (error "BUG: missing DO-INSTALL case")))))
@@ -191,17 +233,19 @@ Returns T upon successful installation, NIL otherwise."
       ;; environment to reflect this, or we're installing a dep and
       ;; should check that the environment has been set up properly.
       (cond
-	;; if the package has a customizepkg definition, build it with customizations applied whether it's a dependency or not
-	((customize-p pkg-name)
-	 (unwind-protect
-	      (progn
+        ;; if the package has a customizepkg definition, build it with
+        ;; customizations applied whether it's a dependency or not
+        #+(or) ; needs rework
+        ((customize-p pkg-name)
+         (unwind-protect
+              (progn
                 (get-pkgbuild pkg-name)
                 (setf (current-directory) pkg-name)
                 (apply-customizations)
                 (run-makepkg)
                 (install-pkg-tarball))
-	   (cleanup-temp-files pkg-name)))
-	;; installing a dep
+           (cleanup-temp-files pkg-name)))
+        ;; installing a dep
         ((boundp '*root-package*)
          (assert *root-package*)
          (check-type *root-package* string)
@@ -296,17 +340,15 @@ Returns T upon successful installation, NIL otherwise."
                 #+(or)(info "Package ~S is not installed, skipping removal." pkg-name)
                 nil)
                (t
-                (run-pacman (list "-R" pkg-name))))))
+                (prog1
+                    (run-pacman (list "-R" pkg-name))
+                  (maybe-refresh-cache))))))
     (restart-case
         (do-remove)
       (skip-package ()
         :report (lambda (s)
                   (format s "Skip removal of package ~S and continue" pkg-name))
         (values nil 'skipped)))))
-
-(defun parse-options (argv)
-  ;; TODO
-  (getopt:getopt argv nil))
 
 (defun display-help ()
   (format t "~
@@ -336,9 +378,9 @@ Usage:
      (mapcar #'remove-package (cdr argv)))
     ((and (>= argc 2) (equal (first argv) "-G"))
      (let ((return-values nil))
-       (mapcar #'(lambda (pkg)
-		   (push (get-pkgbuild pkg) return-values)) (cdr argv))
-       (loop for result in (reverse return-values) do (info "~s" result))))
+       (mapcar (lambda (pkg)
+                 (push (get-pkgbuild pkg) return-values)) (cdr argv))
+       (loop for result in (reverse return-values) do (info result))))
     (t
      (display-help))))
 
@@ -367,15 +409,19 @@ Usage:
                                              :executable t
                                              :save-runtime-options t)))
             (if forkp
-		(let ((pid (sb-posix:fork)))
-		  (if (zerop pid)
-		      (dump)
-		      (progn
-			(format t "INFO: waiting for child to finish building the core...~%")
-			(sb-posix:waitpid pid 0)
-			(format t "INFO: ...done~%"))))
-		(dump))))
+              (let ((pid (sb-posix:fork)))
+                (if (zerop pid)
+                  (dump)
+                  (progn
+                    (format t "INFO: waiting for child to finish building the core...~%")
+                    (sb-posix:waitpid pid 0)
+                    (format t "INFO: ...done~%"))))
+              (dump))))
+  #+ccl(ccl:save-application "paktahn"
+                             :toplevel-function #'core-main
+                             :prepend-kernel t)
   #+ecl(asdf:make-build :paktahn :type :program :monolithic t
-			:prologue-code '(require :asdf)
-			:epilogue-code '(paktahn::core-main))
-  #-(or sbcl ecl)(error "don't know how to build a core image"))
+                        :prologue-code '(require :asdf)
+                        :epilogue-code '(paktahn::core-main))
+  #-(or sbcl ecl ccl)(error "don't know how to build a core image"))
+

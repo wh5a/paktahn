@@ -8,6 +8,34 @@
 
 (use-foreign-library libalpm)
 
+;;; versioning
+(defcfun "alpm_pkg_vercmp" :int (v1 :string) (v2 :string))
+
+(defun version= (v1 v2)
+  (zerop (alpm-pkg-vercmp v1 v2)))
+
+(defun version< (v1 v2)
+  (eql -1 (alpm-pkg-vercmp v1 v2)))
+
+(defun version<= (v1 v2)
+  (or (version< v1 v2)
+      (version= v1 v2)))
+
+(defun version> (v1 v2)
+  (not (version<= v1 v2)))
+
+(defun version>= (v1 v2)
+  (not (version< v1 v2)))
+
+(defun version-spec-satisfied-p (relation actual-ver demanded-ver)
+  (declare (string relation actual-ver demanded-ver))
+  (unless (member relation '("<" "<=" "=" ">=" ">") :test #'equal)
+    (error "Bogus version relation specifier ~S" relation))
+  (let ((relation-fn-name (intern (concatenate 'string "VERSION" relation) #.*package*)))
+    (assert (fboundp relation-fn-name))
+    (funcall relation-fn-name actual-ver demanded-ver)))
+
+
 ;;; lists helper
 (defcfun "alpm_list_next" :pointer (pkg-iterator :pointer))
 (defcfun "alpm_list_getdata" :pointer (pkg-iterator :pointer))
@@ -61,9 +89,9 @@
 ;;;; packages
 (defcfun "alpm_db_get_pkgcache" :pointer (db :pointer))
 
-(defcfun "alpm_pkg_get_name" :string (pkg :pointer))
-(defcfun "alpm_pkg_get_version" :string (pkg :pointer))
-(defcfun "alpm_pkg_get_desc" :string (pkg :pointer))
+(defcfun "alpm_pkg_get_name" safe-string (pkg :pointer))
+(defcfun "alpm_pkg_get_version" safe-string (pkg :pointer))
+(defcfun "alpm_pkg_get_desc" safe-string (pkg :pointer))
 
 (defun map-db-packages (fn &key (db-list *sync-dbs*))
   "Search a database for packages. FN will be called for each
@@ -112,15 +140,16 @@ objects."
          (retry)))
      ,@body))
 
-(defun run-pacman (args &key capture-output-p)
+(defun run-pacman (args &key capture-output-p force)
   (with-pacman-lock
-    (run-program "sudo" (append (list *pacman-binary* "--needed")
+    (run-program "sudo" (append (list *pacman-binary*)
+                                (unless force (list "--needed"))
                                 args)
                  :capture-output-p capture-output-p)))
                  
 
 ;;;; Lisp interface
-(defun install-binary-package (db-name pkg-name &key dep-of)
+(defun install-binary-package (db-name pkg-name &key dep-of force)
   "Use Pacman to install a package."
   ;; TODO: check whether it's installed already
   ;; TODO: take versions into account
@@ -143,7 +172,7 @@ objects."
        (info "Installing binary package ~S from repository ~S.~%"
              pkg-name db-name)
        (let* ((fully-qualified-pkg-name (format nil "~A/~A" db-name pkg-name))
-              (return-value (run-pacman (list "-S" fully-qualified-pkg-name))))
+              (return-value (run-pacman (list "-S" fully-qualified-pkg-name) :force force)))
          (check-return-value return-value))))
     t))
 
