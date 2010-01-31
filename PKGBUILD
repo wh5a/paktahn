@@ -3,9 +3,9 @@
 # Maintainer: Leslie P. Polzer <polzer@gnu.org>
 
 pkgname=paktahn
-pkgver=0.8.2
-libver=0.8
-pkgrel=2
+pkgver=0.8.3
+libver=0.8.3
+pkgrel=1
 pkgdesc="The kick-ass package manager for Arch Linux!"
 arch=('i686' 'x86_64')
 depends=('pacman' 'readline' 'sudo')
