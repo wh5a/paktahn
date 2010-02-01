@@ -203,11 +203,9 @@ Returns T upon successful installation, NIL otherwise."
                                                 pkg-name)
                                         nil)
                            (force-install)))
-                        ((and (version> local-version remote-version))
-                         (when (ask-y/n (format nil "Package ~A is more recent than remote version. ~
-                                                Downgrade it to version ~A" pkg-name remote-version)
-                                        nil)
-                           (force-install)))
+                        ((version> local-version remote-version)
+                          (info "Package ~S is more recent than remote version." pkg-name)
+                          nil)
                         (t
                          (info "Package ~S is already installed." pkg-name)
                          t)))))
