@@ -133,14 +133,13 @@
     (pkgbuild-directory pkg-name)))
 
 (defun get-pkgbuild-from-svn (pkg-name repo)
-  (let ((arch (get-carch))
-	(server "svn://svn.archlinux.org/")
+  (let ((server "svn://svn.archlinux.org/")
 	(operation "checkout"))
     (flet ((checkout-pkgbuild (directory)
 	     (let ((return-value
 		    (run-program "svn" (list operation
 					     (concatenate 'string server directory pkg-name
-							  "/repos/" repo "-" arch)
+							  "/trunk")
 					     pkg-name))))
 	       (if (zerop return-value)
 		   (pkgbuild-directory pkg-name)
